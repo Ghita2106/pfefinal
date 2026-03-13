@@ -6,9 +6,9 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 from detector.features_simple import make_features
 
-LOG_FILE = "/var/log/apache2/access.log"
-MODEL_FILE = "models/rf_apache.pkl"
-OUTPUT_FILE = "outputs/alerts_realtime.jsonl"
+log_file = "/var/log/apache2/access.log"
+model_file = "models/rf_apache.pkl"
+output_file = "outputs/alerts_realtime.jsonl"
 
 pattern = re.compile(
     r'(?P<ip>\S+) \S+ \S+ \[(?P<ts>[^\]]+)\] '
@@ -16,96 +16,76 @@ pattern = re.compile(
     r'(?P<status>\d{3}) (?P<size>\S+) "(?P<ref>[^"]*)" "(?P<ua>[^"]*)"'
 )
 
+print("Chargement du modèle")
+model = joblib.load(model_file)
+
 attempts = defaultdict(list)
-bruteforce_alerted = {}
 
 WINDOW = 60
 THRESHOLD = 5
 
-last_sqli_alert = {}
-SQLI_ALERT_DELAY = 5
-BRUTEFORCE_ALERT_DELAY = 30
+# mots suspects pour SQL injection
+sql_words = ["union", "select", "sleep", "or 1=1", "and 1=1", "%27", "'"]
 
 
-def follow(f):
-    f.seek(0, 2)
+def follow(file):
+    file.seek(0, 2)
+
     while True:
-        line = f.readline()
+        line = file.readline()
+
         if not line:
             time.sleep(0.2)
             continue
+
         yield line
 
 
 def get_path(url):
     if "?" in url:
         return url.split("?")[0]
+
     return url
 
 
-def save_alert(out, alert):
-    out.write(json.dumps(alert) + "\n")
-    out.flush()
+with open(log_file, "r", errors="ignore") as f, open(output_file, "a") as out:
 
-
-def main():
-    print("Chargement du modèle...")
-    model = joblib.load(MODEL_FILE)
     print("Détection temps réel lancée")
 
-    with open(LOG_FILE, "r", errors="ignore") as log_file, open(OUTPUT_FILE, "a", encoding="utf-8") as out:
-        for line in follow(log_file):
-            m = pattern.search(line)
-            if not m:
-                continue
+    for line in follow(f):
 
-            data = m.groupdict()
+        m = pattern.search(line)
 
-            ip = data["ip"]
-            url = data["url"]
-            path = get_path(url)
-            method = data["method"]
-            status = int(data["status"])
-            ua = data["ua"]
+        if m is None:
+            continue
 
-            # nettoyage des anciennes tentatives
-            now_dt = datetime.now()
-            attempts[ip] = [
-                t for t in attempts[ip]
-                if t > now_dt - timedelta(seconds=WINDOW)
-            ]
+        data = m.groupdict()
 
-            # si plus aucune tentative récente, on réautorise une future alerte brute force
-            if len(attempts[ip]) == 0 and ip in bruteforce_alerted:
-                del bruteforce_alerted[ip]
+        ip = data["ip"]
+        url = data["url"]
+        path = get_path(url)
+        method = data["method"]
+        status = int(data["status"])
+        ua = data["ua"]
 
-            # si l'utilisateur se déconnecte, on remet le compteur à zéro
-            if path == "/logout.php":
-                attempts[ip].clear()
-                if ip in bruteforce_alerted:
-                    del bruteforce_alerted[ip]
-                continue
+        # ignorer quelques pages normales
+        if path in ["/", "/index.php", "/logout.php", "/register.php"]:
+            continue
 
-            # ignorer quelques pages normales
-            if path in ["/", "/index.php", "/register.php", "/favicon.ico"]:
-                continue
+        # détection brute force
+        if path == "/login.php":
 
-            # -------------------------
-            # Détection brute force
-            # -------------------------
-            if path == "/login.php" and method == "POST":
-                attempts[ip].append(now_dt)
+            if method == "POST":
 
-                # anti-spam d'alerte brute force
-                now_ts = time.time()
-                already_alerted = ip in bruteforce_alerted
-                recent_alert = (
-                    already_alerted and
-                    now_ts - bruteforce_alerted[ip] < BRUTEFORCE_ALERT_DELAY
-                )
+                now = datetime.now()
+                attempts[ip].append(now)
 
-                if len(attempts[ip]) >= THRESHOLD and not recent_alert:
-                    bruteforce_alerted[ip] = now_ts
+                attempts[ip] = [
+                    t for t in attempts[ip]
+                    if t > now - timedelta(seconds=WINDOW)
+                ]
+
+                if len(attempts[ip]) >= THRESHOLD:
 
                     alert = {
                         "type": "bruteforce",
@@ -118,34 +98,22 @@ def main():
                         "ua": ua
                     }
 
-                    print(f"[BRUTEFORCE] IP={ip} | Tentatives={len(attempts[ip])} | URL={url}")
-                    save_alert(out, alert)
+                    print("[BRUTEFORCE]", ip, url)
 
-                continue
+                    out.write(json.dumps(alert) + "\n")
+                    out.flush()
 
-            # ne pas envoyer login.php au modèle ML
-            if path == "/login.php":
-                continue
+            continue
 
-            # -------------------------
-            # Détection SQL injection
-            # -------------------------
-            features = make_features(url, method, status, ua)
-            pred = model.predict([features])[0]
-            proba = model.predict_proba([features])[0]
-            confidence = float(max(proba))
+        # petite détection simple SQLi par mots
+        low_url = url.lower()
 
-            if pred == "sqli":
-                now_ts = time.time()
-
-                if ip in last_sqli_alert and now_ts - last_sqli_alert[ip] < SQLI_ALERT_DELAY:
-                    continue
-
-                last_sqli_alert[ip] = now_ts
+        for word in sql_words:
+            if word in low_url:
 
                 alert = {
                     "type": "sqli",
-                    "confidence": round(confidence, 3),
+                    "confidence": 1.0,
                     "ip": ip,
                     "timestamp": data["ts"],
                     "method": method,
@@ -154,9 +122,32 @@ def main():
                     "ua": ua
                 }
 
-                print(f"[SQLI] IP={ip} | URL={url}")
-                save_alert(out, alert)
+                print("[SQLI]", ip, url)
 
+                out.write(json.dumps(alert) + "\n")
+                out.flush()
 
-if __name__ == "__main__":
-    main()
+                break
+
+        # sinon on teste SQL injection avec le modèle
+        features = make_features(url, method, status, ua)
+
+        pred = model.predict([features])[0]
+
+        if pred == "sqli":
+
+            alert = {
+                "type": "sqli",
+                "confidence": 0.8,
+                "ip": ip,
+                "timestamp": data["ts"],
+                "method": method,
+                "url": url,
+                "status": status,
+                "ua": ua
+            }
+
+            print("[SQLI]", ip, url)
+
+            out.write(json.dumps(alert) + "\n")
+            out.flush()

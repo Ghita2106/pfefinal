@@ -1,7 +1,10 @@
 .venv/
+venv/
 __pycache__/
 *.pyc
 
-data/*.log
+data/*
 outputs/*
+*.log
+
 models/*.pkl

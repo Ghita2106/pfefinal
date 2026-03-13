@@ -3,22 +3,34 @@ import joblib
 from sklearn.ensemble import RandomForestClassifier
 from detector.features_simple import make_features
 
-df = pd.read_csv("data/training.csv")
+print("Lecture du dataset")
 
-X = df.apply(
-    lambda r: make_features(r["url"], r["method"], int(r["status"]), r["ua"]),
-    axis=1
-).tolist()
+data = pd.read_csv("data/training.csv")
 
-y = df["label"].tolist()
+X = []
+y = []
+
+for i,row in data.iterrows():
+
+    features = make_features(
+        row["url"],
+        row["method"],
+        int(row["status"]),
+        row["ua"]
+    )
+
+    X.append(features)
+    y.append(row["label"])
+
+
+print("Entrainement du modèle")
 
 model = RandomForestClassifier(
-    n_estimators=200,
-    random_state=42
+    n_estimators=100
 )
 
-model.fit(X, y)
+model.fit(X,y)
 
-joblib.dump(model, "models/rf_apache.pkl")
+joblib.dump(model,"models/rf_apache.pkl")
 
-print("Modèle entraîné et sauvegardé dans models/rf_apache.pkl")
+print("Modèle sauvegardé dans models/rf_apache.pkl ")

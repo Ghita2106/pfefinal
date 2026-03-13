@@ -1,18 +1,23 @@
 import re
 from urllib.parse import unquote
 
-SQLI_PATTERN = re.compile(r"(union|select|sleep|or\s+1=1|and\s+1=1)", re.I)
-TOOL_UA = re.compile(r"(sqlmap|curl|python-requests)", re.I)
+pattern_sql = re.compile(r"(union|select|sleep|or\s+1=1|and\s+1=1)",re.I)
+pattern_tool = re.compile(r"(sqlmap|curl|python-requests)",re.I)
 
-def make_features(url: str, method: str, status: int, ua: str):
-    u = unquote(url or "")
-    m = (method or "").upper()
-    ua = ua or ""
+def make_features(url,method,status,ua):
 
-    f_len = len(u)
-    f_specials = sum(not c.isalnum() for c in u)
-    f_sqli_kw = 1 if SQLI_PATTERN.search(u) else 0
-    f_is_post = 1 if m == "POST" else 0
-    f_tool_ua = 1 if TOOL_UA.search(ua) else 0
+    url = unquote(url or "")
+    method = method.upper()
 
-    return [f_len, f_specials, f_sqli_kw, f_is_post, f_tool_ua]
+    length = len(url)
+
+    specials = 0
+    for c in url:
+        if not c.isalnum():
+            specials += 1
+
+    has_sql = 1 if pattern_sql.search(url) else 0
+    is_post = 1 if method == "POST" else 0
+    tool = 1 if pattern_tool.search(ua) else 0
+
+    return [length,specials,has_sql,is_post,tool]

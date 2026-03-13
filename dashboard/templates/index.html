@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Dashboard SIEM IA</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+
+
+<body>
+    <nav class="navbar">
+        <div class="nav-brand">
+            <span class="shield"> </span>
+            <span>SIEM IA</span>
+        </div>
+
+        <div class="nav-links">
+            <a href="/" class="nav-link active">Dashboard</a>
+            <a href="/import-logs" class="nav-link">Importer des logs</a>
+        </div>
+    </nav>
+
+    <header class="header">
+        <div>
+            <h1>Dashboard SIEM IA</h1>
+            <p>Surveillance des alertes de sécurité en temps réel</p>
+        </div>
+        <div class="status">
+            <span class="dot"></span>
+            <span>Monitoring actif</span>
+        </div>
+    </header>
+
+    <section class="panel control-panel">
+        <h2>Détection en temps réel</h2>
+
+        <div class="detector-controls">
+	     <button class="start-btn" disabled>Démarrer la détection</button>
+             <button class="stop-btn" disabled>Arrêter la détection</button>
+        </div>
+    </section>
+
+
+    <section class="cards">
+        <div class="card">
+            <h3>Total alertes</h3>
+            <p id="total-alerts">{{ stats.total }}</p>
+        </div>
+
+        <div class="card">
+            <h3>SQL Injection</h3>
+            <p id="sqli-count">{{ stats.sqli }}</p>
+            <span class="subinfo" id="sqli-percent">{{ stats.sqli_percent }}%</span>
+        </div>
+
+        <div class="card">
+            <h3>Brute force</h3>
+            <p id="bruteforce-count">{{ stats.bruteforce }}</p>
+            <span class="subinfo" id="bruteforce-percent">{{ stats.bruteforce_percent }}%</span>
+        </div>
+
+        <div class="card">
+            <h3>IP uniques</h3>
+            <p id="unique-ips">{{ stats.unique_ips }}</p>
+        </div>
+    </section>
+
+    <section class="main-grid single-chart">
+        <div class="panel">
+            <h2>Histogramme des alertes</h2>
+            <div class="chart-box small-chart">
+                <canvas id="attackBarChart"></canvas>
+            </div>
+        </div>
+
+        <div class="panel">
+            <h2>Top IP attaquantes</h2>
+            <div id="top-ips">
+                {% if stats.top_ips %}
+                    <ul class="ip-list">
+                        {% for ip, count in stats.top_ips %}
+                            <li>
+                                <span>{{ ip }}</span>
+                                <strong>{{ count }}</strong>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                {% else %}
+                    <p>Aucune donnée disponible.</p>
+                {% endif %}
+            </div>
+        </div>
+    </section>
+
+    <section class="secondary-grid">
+        <div class="panel">
+            <h2>Niveau de menace</h2>
+            <div class="risk-box">
+                <div class="risk-value" id="risk-label">{{ stats.risk_label }}</div>
+                <div class="progress">
+                    <div class="progress-bar" id="risk-bar" style="width: {{ stats.risk_score }}%;"></div>
+                </div>
+                <p class="risk-score">
+                    Score : <span id="risk-score">{{ stats.risk_score }}</span>%
+                </p>
+            </div>
+        </div>
+
+        <div class="panel">
+            <h2>Répartition</h2>
+            <div class="percent-box">
+                <div class="percent-item">
+                    <span>SQLi</span>
+                    <strong id="percent-sqli">{{ stats.sqli_percent }}%</strong>
+                </div>
+                <div class="percent-item">
+                    <span>Bruteforce</span>
+                    <strong id="percent-bruteforce">{{ stats.bruteforce_percent }}%</strong>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="panel table-panel">
+        <div class="table-header">
+            <h2>Dernières alertes</h2>
+            <span id="refresh-info">Actualisation automatique toutes les 5 secondes</span>
+        </div>
+
+        <div class="table-wrapper">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Type</th>
+                        <th>Confidence</th>
+                        <th>IP</th>
+                        <th>Timestamp</th>
+                        <th>Méthode</th>
+                        <th>URL</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="alerts-table-body">
+                    {% if alerts %}
+                        {% for alert in alerts[:10] %}
+                        <tr>
+                            <td><span class="badge {{ alert.type }}">{{ alert.type }}</span></td>
+                            <td>{{ alert.confidence }}</td>
+                            <td>{{ alert.ip }}</td>
+                            <td>{{ alert.timestamp }}</td>
+                            <td>{{ alert.method }}</td>
+                            <td class="url-cell">{{ alert.url }}</td>
+                            <td>{{ alert.status }}</td>
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr>
+                            <td colspan="7">Aucune alerte détectée.</td>
+                        </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="pagination">
+            <button id="prev-page">Précédent</button>
+            <span id="page-info">Page 1</span>
+            <button id="next-page">Suivant</button>
+        </div>
+    </section>
+
+    <script>
+        const initialStats = {{ stats | tojson }};
+        const initialAlerts = {{ alerts | tojson }};
+    </script>
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

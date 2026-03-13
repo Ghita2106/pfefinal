@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Importer des fichiers de logs - SIEM IA</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand">
+            <span class="shield"> </span>
+            <span>SIEM IA</span>
+        </div>
+
+        <div class="nav-links">
+            <a href="/" class="nav-link">Dashboard</a>
+            <a href="/import-logs" class="nav-link active">Importer des logs</a>
+        </div>
+    </nav>
+
+    <header class="header">
+        <div>
+            <h1>Import de fichiers logs</h1>
+        </div>
+        <div class="status upcoming">
+            <span class="dot upcoming-dot"></span>
+            <span>Bientôt disponible</span>
+        </div>
+    </header>
+
+    <section class="panel upload-panel">
+        <h2>Ajouter un fichier de logs</h2>
+        <p class="upload-text">
+        </p>
+
+        <form class="upload-form">
+            <label for="logfile">Sélectionner un fichier log</label>
+            <input type="file" id="logfile" name="logfile" disabled>
+
+            <label for="attack-type">Type d’analyse souhaité</label>
+            <select id="attack-type" name="attack-type">
+                <option>Détection SQL Injection</option>
+                <option>Détection Brute Force</option>
+                <option>Détection XSS (future)</option>
+                <option>Détection Scan (future)</option>
+            </select>
+
+            <button type="button" class="upload-btn" disabled>Analyser</button>
+        </form>
+    </section>
+
+</body>
+</html>
